@@ -212,7 +212,7 @@ func needsUserPostCreateUpdate(d *schema.ResourceData) bool {
 		return true
 	}
 
-	if _, ok := d.GetOkExists(rateLimitBytesPerSecondKey); ok {
+	if configuredValueExists(d, rateLimitBytesPerSecondKey) {
 		return true
 	}
 
