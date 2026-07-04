@@ -225,6 +225,11 @@ func dataSourceTarget() *schema.Resource {
 							Computed:    true,
 							Description: "The PostgreSQL username",
 						},
+						"default_database_name": {
+							Type:        schema.TypeString,
+							Computed:    true,
+							Description: "The default PostgreSQL database name to connect to",
+						},
 						"protocol_version": {
 							Type:        schema.TypeString,
 							Computed:    true,

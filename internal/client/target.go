@@ -85,13 +85,14 @@ type TargetMySQLOptions struct {
 
 // TargetPostgresOptions represents options for PostgreSQL targets
 type TargetPostgresOptions struct {
-	Kind            string `json:"kind"`
-	Host            string `json:"host"`
-	Port            int    `json:"port"`
-	Username        string `json:"username"`
-	ProtocolVersion string `json:"protocol_version,omitempty"`
-	Password        string `json:"password,omitempty"`
-	TLS             TLS    `json:"tls"`
+	Kind                string `json:"kind"`
+	Host                string `json:"host"`
+	Port                int    `json:"port"`
+	Username            string `json:"username"`
+	DefaultDatabaseName string `json:"default_database_name,omitempty"`
+	ProtocolVersion     string `json:"protocol_version,omitempty"`
+	Password            string `json:"password,omitempty"`
+	TLS                 TLS    `json:"tls"`
 }
 
 // KubernetesTargetAuth is a wrapper for the different Kubernetes authentication methods

@@ -120,6 +120,7 @@ Based on the target type, one of the following option blocks will be populated:
   - `host` - The PostgreSQL server hostname or IP address.
   - `port` - The PostgreSQL server port.
   - `username` - The PostgreSQL username.
+  - `default_database_name` - The default PostgreSQL database name to connect to.
   - `protocol_version` - The PostgreSQL protocol version requested by the target.
   - `password` - The PostgreSQL password.
   - `tls` - TLS configuration.
@@ -240,6 +241,7 @@ Read-Only:
 
 Read-Only:
 
+- `default_database_name` (String)
 - `host` (String)
 - `password` (String)
 - `port` (Number)
