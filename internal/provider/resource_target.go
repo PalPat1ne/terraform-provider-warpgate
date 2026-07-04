@@ -245,6 +245,11 @@ func resourceTarget() *schema.Resource {
 							Required:    true,
 							Description: "The PostgreSQL username",
 						},
+						"default_database_name": {
+							Type:        schema.TypeString,
+							Optional:    true,
+							Description: "The default PostgreSQL database name to connect to",
+						},
 						"protocol_version": {
 							Type:         schema.TypeString,
 							Optional:     true,
@@ -659,6 +664,11 @@ func buildPostgresTargetOptions(opts map[string]any) (*client.TargetPostgresOpti
 	port := opts["port"].(int)
 	username := opts["username"].(string)
 
+	var defaultDatabaseName string
+	if v, ok := opts["default_database_name"]; ok {
+		defaultDatabaseName = v.(string)
+	}
+
 	var protocolVersion string
 	if v, ok := opts["protocol_version"]; ok {
 		protocolVersion = v.(string)
@@ -680,13 +690,14 @@ func buildPostgresTargetOptions(opts map[string]any) (*client.TargetPostgresOpti
 	}
 
 	return &client.TargetPostgresOptions{
-		Kind:            "Postgres",
-		Host:            host,
-		Port:            port,
-		Username:        username,
-		ProtocolVersion: protocolVersion,
-		Password:        password,
-		TLS:             tls,
+		Kind:                "Postgres",
+		Host:                host,
+		Port:                port,
+		Username:            username,
+		DefaultDatabaseName: defaultDatabaseName,
+		ProtocolVersion:     protocolVersion,
+		Password:            password,
+		TLS:                 tls,
 	}, nil
 }
 
@@ -879,6 +890,10 @@ func setTargetOptions(d *schema.ResourceData, options any) error {
 			"port":     optionsMap["port"],
 			"username": optionsMap["username"],
 			"tls":      []any{tlsOpts},
+		}
+
+		if defaultDatabaseName, ok := optionsMap["default_database_name"].(string); ok && defaultDatabaseName != "" {
+			pgOpts["default_database_name"] = defaultDatabaseName
 		}
 
 		if protocolVersion, ok := optionsMap["protocol_version"].(string); ok && protocolVersion != "" {

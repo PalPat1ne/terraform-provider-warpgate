@@ -9,11 +9,12 @@ import (
 
 func TestBuildPostgresTargetOptionsWithProtocolVersion(t *testing.T) {
 	opts, err := buildPostgresTargetOptions(map[string]any{
-		"host":             "postgres.example.com",
-		"port":             5432,
-		"username":         "admin",
-		"protocol_version": "3.0",
-		"password":         "secret",
+		"host":                  "postgres.example.com",
+		"port":                  5432,
+		"username":              "admin",
+		"default_database_name": "app_db",
+		"protocol_version":      "3.0",
+		"password":              "secret",
 		"tls": []any{
 			map[string]any{
 				"mode":   "Required",
@@ -28,17 +29,22 @@ func TestBuildPostgresTargetOptionsWithProtocolVersion(t *testing.T) {
 	if opts.ProtocolVersion != "3.0" {
 		t.Fatalf("expected protocol version 3.0, got %q", opts.ProtocolVersion)
 	}
+
+	if opts.DefaultDatabaseName != "app_db" {
+		t.Fatalf("expected default database name app_db, got %q", opts.DefaultDatabaseName)
+	}
 }
 
 func TestSetTargetOptionsWithPostgresProtocolVersion(t *testing.T) {
 	d := schema.TestResourceDataRaw(t, resourceTarget().Schema, map[string]any{})
 	err := setTargetOptions(d, &client.TargetPostgresOptions{
-		Kind:            "Postgres",
-		Host:            "postgres.example.com",
-		Port:            5432,
-		Username:        "admin",
-		ProtocolVersion: "3.2",
-		Password:        "secret",
+		Kind:                "Postgres",
+		Host:                "postgres.example.com",
+		Port:                5432,
+		Username:            "admin",
+		DefaultDatabaseName: "app_db",
+		ProtocolVersion:     "3.2",
+		Password:            "secret",
 		TLS: client.TLS{
 			Mode:   client.TLSModeRequired,
 			Verify: true,
@@ -54,6 +60,10 @@ func TestSetTargetOptionsWithPostgresProtocolVersion(t *testing.T) {
 	}
 
 	opts := postgresOptions[0].(map[string]any)
+	if got := opts["default_database_name"]; got != "app_db" {
+		t.Fatalf("expected default database name app_db, got %v", got)
+	}
+
 	if got := opts["protocol_version"]; got != "3.2" {
 		t.Fatalf("expected protocol version 3.2, got %v", got)
 	}
