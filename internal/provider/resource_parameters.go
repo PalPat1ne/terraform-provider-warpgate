@@ -11,6 +11,8 @@ import (
 )
 
 func resourceParameters() *schema.Resource {
+	intAtLeastZero := validation.ToDiagFunc(validation.IntAtLeast(0))
+
 	return &schema.Resource{
 		CreateContext: resourceParametersCreate,
 		ReadContext:   resourceParametersRead,
@@ -27,7 +29,7 @@ func resourceParameters() *schema.Resource {
 			},
 			"rate_limit_bytes_per_second": optionalIntParameter(
 				"Global bandwidth limit",
-				validation.IntAtLeast(0),
+				intAtLeastZero,
 			),
 			"ssh_client_auth_publickey": {
 				Type:        schema.TypeBool,
@@ -68,11 +70,11 @@ func resourceParameters() *schema.Resource {
 			},
 			"ticket_max_duration_seconds": optionalIntParameter(
 				"Maximum ticket duration in seconds.",
-				validation.IntAtLeast(0),
+				intAtLeastZero,
 			),
 			"ticket_max_uses": optionalIntParameter(
 				"Maximum number of uses for tickets.",
-				validation.IntBetween(0, 32767),
+				validation.ToDiagFunc(validation.IntBetween(0, 32767)),
 			),
 			"ticket_require_description": {
 				Type:        schema.TypeBool,
@@ -109,7 +111,7 @@ func resourceParameters() *schema.Resource {
 					Schema: map[string]*schema.Schema{
 						"min_length": optionalIntParameter(
 							"Minimum number of characters, or 0 for no requirement.",
-							validation.IntAtLeast(0),
+							intAtLeastZero,
 						),
 						"require_uppercase": optionalComputedBoolParameter("Require at least one uppercase character."),
 						"require_lowercase": optionalComputedBoolParameter("Require at least one lowercase character."),
@@ -120,7 +122,7 @@ func resourceParameters() *schema.Resource {
 			},
 			"max_api_token_duration_seconds": optionalIntParameter(
 				"Maximum API token duration in seconds.",
-				validation.IntAtLeast(0),
+				intAtLeastZero,
 			),
 			"record_scp": optionalComputedBoolParameter("Record SCP sessions."),
 			"login_protection_enabled": optionalComputedBoolParameter(
@@ -128,19 +130,19 @@ func resourceParameters() *schema.Resource {
 			),
 			"login_protection_retention_seconds": optionalIntParameter(
 				"How long login protection records are retained, in seconds.",
-				validation.IntAtLeast(0),
+				intAtLeastZero,
 			),
 			"lp_ip_max_attempts": optionalIntParameter(
 				"Maximum failed login attempts per IP address.",
-				validation.IntAtLeast(0),
+				intAtLeastZero,
 			),
 			"lp_ip_time_window_seconds": optionalIntParameter(
 				"Time window for failed login attempts per IP address, in seconds.",
-				validation.IntAtLeast(0),
+				intAtLeastZero,
 			),
 			"lp_ip_base_block_duration_seconds": optionalIntParameter(
 				"Base IP block duration in seconds.",
-				validation.IntAtLeast(0),
+				intAtLeastZero,
 			),
 			"lp_ip_block_duration_multiplier": {
 				Type:         schema.TypeFloat,
@@ -151,26 +153,26 @@ func resourceParameters() *schema.Resource {
 			},
 			"lp_ip_max_block_duration_seconds": optionalIntParameter(
 				"Maximum IP block duration in seconds.",
-				validation.IntAtLeast(0),
+				intAtLeastZero,
 			),
 			"lp_ip_cooldown_reset_seconds": optionalIntParameter(
 				"Cooldown period before the IP block escalation resets, in seconds.",
-				validation.IntAtLeast(0),
+				intAtLeastZero,
 			),
 			"lp_user_max_attempts": optionalIntParameter(
 				"Maximum failed login attempts per user.",
-				validation.IntAtLeast(0),
+				intAtLeastZero,
 			),
 			"lp_user_time_window_seconds": optionalIntParameter(
 				"Time window for failed login attempts per user, in seconds.",
-				validation.IntAtLeast(0),
+				intAtLeastZero,
 			),
 			"lp_user_auto_unlock": optionalComputedBoolParameter(
 				"Automatically unlock users after the lockout duration.",
 			),
 			"lp_user_lockout_duration_seconds": optionalIntParameter(
 				"User lockout duration in seconds.",
-				validation.IntAtLeast(0),
+				intAtLeastZero,
 			),
 			"lp_user_exempt_admins": optionalComputedBoolParameter(
 				"Exempt administrators from user login protection lockouts.",
@@ -207,13 +209,13 @@ func optionalComputedBoolParameter(description string) *schema.Schema {
 	}
 }
 
-func optionalIntParameter(description string, validateFunc schema.SchemaValidateFunc) *schema.Schema {
+func optionalIntParameter(description string, validateFunc schema.SchemaValidateDiagFunc) *schema.Schema {
 	return &schema.Schema{
-		Type:         schema.TypeInt,
-		Optional:     true,
-		Computed:     true,
-		Description:  description,
-		ValidateFunc: validateFunc,
+		Type:             schema.TypeInt,
+		Optional:         true,
+		Computed:         true,
+		Description:      description,
+		ValidateDiagFunc: validateFunc,
 	}
 }
 
