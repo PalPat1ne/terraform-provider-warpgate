@@ -29,6 +29,7 @@ The following arguments are supported:
 
 * `name` - (Required) The name of the role. Must be unique within the Warpgate instance.
 * `description` - (Optional) A human-readable description of the role and its purpose.
+* `is_default` - (Optional) Assign this role to every newly created user. Default: `false`.
 
 ## Attribute Reference
 
@@ -38,10 +39,23 @@ In addition to all arguments above, the following attributes are exported:
 
 ## Import
 
-Roles can be imported using their ID:
+### Declarative Import Block (Terraform 1.5+ / OpenTofu 1.6+)
 
+```hcl
+import {
+  to = warpgate_role.developers
+  id = "12345678-1234-1234-1234-123456789012"
+}
 ```
-$ terraform import warpgate_role.developers 12345678-1234-1234-1234-123456789012
+
+### CLI Command (Terraform / OpenTofu)
+
+```shell
+# Using Terraform CLI
+terraform import warpgate_role.developers 12345678-1234-1234-1234-123456789012
+
+# Using OpenTofu CLI
+tofu import warpgate_role.developers 12345678-1234-1234-1234-123456789012
 ```
 
 {{ .SchemaMarkdown | trimspace }}

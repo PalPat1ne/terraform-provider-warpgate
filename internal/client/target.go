@@ -28,13 +28,20 @@ type TLS struct {
 
 // Target represents a Warpgate target
 type Target struct {
-	ID                      string        `json:"id"`
-	Name                    string        `json:"name"`
-	Description             string        `json:"description,omitempty"`
-	GroupId                 string        `json:"group_id,omitempty"`
-	RateLimitBytesPerSecond *int          `json:"rate_limit_bytes_per_second,omitempty"`
-	AllowRoles              []string      `json:"allow_roles"`
-	Options                 TargetOptions `json:"options"`
+	ID                       string        `json:"id"`
+	Name                     string        `json:"name"`
+	Description              string        `json:"description,omitempty"`
+	GroupId                  string        `json:"group_id,omitempty"`
+	RateLimitBytesPerSecond  *int          `json:"rate_limit_bytes_per_second,omitempty"`
+	AllowRoles               []string      `json:"allow_roles"`
+	Options                  TargetOptions `json:"options"`
+	TicketMaxDurationSeconds *int64        `json:"ticket_max_duration_seconds,omitempty"`
+	TicketRequestsDisabled   bool          `json:"ticket_requests_disabled"`
+	TicketRequireApproval    bool          `json:"ticket_require_approval"`
+	TicketMaxUses            *int          `json:"ticket_max_uses,omitempty"`
+	// Every write must state the approval gates: Warpgate refuses a target
+	// that leaves one out rather than quietly turning it off.
+	RequireApproval bool `json:"require_approval"`
 }
 
 // TargetOptions is a wrapper for the different target option types
@@ -51,6 +58,12 @@ type SSHTargetPasswordAuth struct {
 
 // SSHTargetPublicKeyAuth represents public key authentication for SSH targets
 type SSHTargetPublicKeyAuth struct {
+	Kind  string `json:"kind"`
+	KeyID string `json:"key_id,omitempty"`
+}
+
+// SSHTargetIamRoleAuth represents IAM role authentication for SSH targets
+type SSHTargetIamRoleAuth struct {
 	Kind string `json:"kind"`
 }
 
@@ -60,8 +73,9 @@ type TargetSSHOptions struct {
 	Host               string        `json:"host"`
 	Port               int           `json:"port"`
 	Username           string        `json:"username"`
-	AllowInsecureAlgos bool          `json:"allow_insecure_algos,omitempty"`
+	AllowInsecureAlgos bool          `json:"allow_insecure_algos"`
 	Auth               SSHTargetAuth `json:"auth"`
+	JumpHost           string        `json:"jump_host,omitempty"`
 }
 
 // TargetHTTPOptions represents options for HTTP targets
@@ -69,30 +83,45 @@ type TargetHTTPOptions struct {
 	Kind         string            `json:"kind"`
 	URL          string            `json:"url"`
 	TLS          TLS               `json:"tls"`
-	Headers      map[string]string `json:"headers,omitempty"`
+	Headers      map[string]string `json:"headers"`
 	ExternalHost string            `json:"external_host,omitempty"`
+}
+
+// DatabaseTargetAuth is a wrapper for the MySQL and PostgreSQL authentication methods
+type DatabaseTargetAuth any
+
+// DatabaseTargetPasswordAuth represents password authentication for database targets
+type DatabaseTargetPasswordAuth struct {
+	Kind     string `json:"kind"`
+	Password string `json:"password"`
+}
+
+// DatabaseTargetIamRoleAuth represents IAM role authentication for database targets
+type DatabaseTargetIamRoleAuth struct {
+	Kind string `json:"kind"`
 }
 
 // TargetMySQLOptions represents options for MySQL targets
 type TargetMySQLOptions struct {
-	Kind     string `json:"kind"`
-	Host     string `json:"host"`
-	Port     int    `json:"port"`
-	Username string `json:"username"`
-	Password string `json:"password,omitempty"`
-	TLS      TLS    `json:"tls"`
+	Kind     string             `json:"kind"`
+	Host     string             `json:"host"`
+	Port     int                `json:"port"`
+	Username string             `json:"username"`
+	Auth     DatabaseTargetAuth `json:"auth"`
+	TLS      TLS                `json:"tls"`
 }
 
 // TargetPostgresOptions represents options for PostgreSQL targets
 type TargetPostgresOptions struct {
-	Kind                string `json:"kind"`
-	Host                string `json:"host"`
-	Port                int    `json:"port"`
-	Username            string `json:"username"`
-	DefaultDatabaseName string `json:"default_database_name,omitempty"`
-	ProtocolVersion     string `json:"protocol_version,omitempty"`
-	Password            string `json:"password,omitempty"`
-	TLS                 TLS    `json:"tls"`
+	Kind                string             `json:"kind"`
+	Host                string             `json:"host"`
+	Port                int                `json:"port"`
+	Username            string             `json:"username"`
+	DefaultDatabaseName string             `json:"default_database_name,omitempty"`
+	IdleTimeout         string             `json:"idle_timeout,omitempty"`
+	ProtocolVersion     string             `json:"protocol_version"`
+	Auth                DatabaseTargetAuth `json:"auth"`
+	TLS                 TLS                `json:"tls"`
 }
 
 // KubernetesTargetAuth is a wrapper for the different Kubernetes authentication methods
@@ -111,6 +140,56 @@ type KubernetesTargetCertificateAuth struct {
 	PrivateKey  string `json:"private_key"`
 }
 
+// KubernetesTargetIamRoleAuth represents AWS IAM role authentication for Kubernetes targets
+type KubernetesTargetIamRoleAuth struct {
+	Kind string `json:"kind"`
+}
+
+// TargetVncOptions represents options for VNC targets
+type TargetVncOptions struct {
+	Kind string        `json:"kind"`
+	Host string        `json:"host"`
+	Port int           `json:"port"`
+	Auth VncTargetAuth `json:"auth"`
+}
+
+// VncTargetAuth is a wrapper for the different VNC authentication methods
+type VncTargetAuth any
+
+// VncTargetNoneAuth represents a VNC server without authentication
+type VncTargetNoneAuth struct {
+	Kind string `json:"kind"`
+}
+
+// VncTargetPasswordAuth represents password authentication for VNC targets
+type VncTargetPasswordAuth struct {
+	Kind     string `json:"kind"`
+	Password string `json:"password"`
+}
+
+// TargetRDPOptions represents options for RDP targets
+type TargetRDPOptions struct {
+	Kind             string        `json:"kind"`
+	Host             string        `json:"host"`
+	Port             int           `json:"port"`
+	Username         string        `json:"username"`
+	Domain           string        `json:"domain,omitempty"`
+	Auth             RDPTargetAuth `json:"auth"`
+	VerifyTLS        bool          `json:"verify_tls"`
+	Compression      string        `json:"compression"`
+	InteractiveLogon bool          `json:"interactive_logon"`
+	TLSSecurity      string        `json:"tls_security"`
+}
+
+// RDPTargetAuth is a wrapper for the different RDP authentication methods
+type RDPTargetAuth any
+
+// RDPTargetPasswordAuth represents password authentication for RDP targets
+type RDPTargetPasswordAuth struct {
+	Kind     string `json:"kind"`
+	Password string `json:"password"`
+}
+
 // TargetKubernetesOptions represents options for Kubernetes targets
 type TargetKubernetesOptions struct {
 	Kind       string               `json:"kind"`
@@ -121,11 +200,18 @@ type TargetKubernetesOptions struct {
 
 // TargetDataRequest is the request payload for creating/updating a target
 type TargetDataRequest struct {
-	Name                    string        `json:"name"`
-	Description             string        `json:"description,omitempty"`
-	GroupId                 string        `json:"group_id,omitempty"`
-	RateLimitBytesPerSecond *int          `json:"rate_limit_bytes_per_second,omitempty"`
-	Options                 TargetOptions `json:"options"`
+	Name                     string        `json:"name"`
+	Description              string        `json:"description,omitempty"`
+	GroupId                  string        `json:"group_id,omitempty"`
+	RateLimitBytesPerSecond  *int          `json:"rate_limit_bytes_per_second,omitempty"`
+	Options                  TargetOptions `json:"options"`
+	TicketMaxDurationSeconds *int64        `json:"ticket_max_duration_seconds,omitempty"`
+	TicketRequestsDisabled   bool          `json:"ticket_requests_disabled"`
+	TicketRequireApproval    bool          `json:"ticket_require_approval"`
+	TicketMaxUses            *int          `json:"ticket_max_uses,omitempty"`
+	// Every write must state the approval gates: Warpgate refuses a target
+	// that leaves one out rather than quietly turning it off.
+	RequireApproval bool `json:"require_approval"`
 }
 
 // GetTargets retrieves all targets from the Warpgate API, optionally filtered by

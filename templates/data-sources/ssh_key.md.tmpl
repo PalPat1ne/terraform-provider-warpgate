@@ -1,0 +1,26 @@
+---
+page_title: "warpgate_ssh_key Data Source - terraform-provider-warpgate"
+subcategory: ""
+description: |-
+  Retrieves details of a specific Warpgate SSH key by ID or label.
+---
+
+# warpgate_ssh_key (Data Source)
+
+Use this data source to retrieve public key information and metadata about a specific Warpgate SSH key.
+
+> **Security Note**: This data source only returns public key attributes (`public_key`, `public_key_base64`) and key metadata. Private key material is never returned by Warpgate or exposed through data sources.
+
+## Example Usage
+
+```terraform
+data "warpgate_ssh_key" "default_key" {
+  label = "deploy-key"
+}
+
+output "key_public_key" {
+  value = data.warpgate_ssh_key.default_key.public_key
+}
+```
+
+{{ .SchemaMarkdown | trimspace }}

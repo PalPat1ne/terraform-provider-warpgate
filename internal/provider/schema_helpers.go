@@ -64,3 +64,7 @@ func configuredValueExists(d *schema.ResourceData, key string) bool {
 func setOptionalInt(d *schema.ResourceData, key string, value *int) error {
 	return d.Set(key, value)
 }
+
+func setOptionalInt64(d *schema.ResourceData, key string, value *int64) error {
+	return d.Set(key, value)
+}

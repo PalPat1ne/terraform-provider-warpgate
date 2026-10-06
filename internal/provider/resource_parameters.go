@@ -56,6 +56,17 @@ func resourceParameters() *schema.Resource {
 				Description:  "How the password login form is presented on the gateway login page.",
 				ValidateFunc: validation.StringInSlice([]string{"Enabled", "Minimized", "Disabled"}, false),
 			},
+			"mfa_enforcement": {
+				Type:         schema.TypeString,
+				Optional:     true,
+				Computed:     true,
+				Description:  "Second-factor policy for password logins: Off, Enroll (users are prompted to set one up), or Require.",
+				ValidateFunc: validation.StringInSlice([]string{"Off", "Enroll", "Require"}, false),
+			},
+			"mfa_policy_exempt_sso_users": optionalComputedBoolParameter(
+				"Exempt users who log in through SSO from mfa_enforcement.",
+			),
+			"default_credential_policy": credentialPolicySchema("Credential policy applied to users that have none of their own."),
 			"ticket_self_service_enabled": {
 				Type:        schema.TypeBool,
 				Optional:    true,
@@ -95,6 +106,13 @@ func resourceParameters() *schema.Resource {
 				Description:  "Action to take when clicking a target.",
 				ValidateFunc: validation.StringInSlice([]string{"Connect", "ShowInstructions"}, false),
 			},
+			"open_targets_in_new_tab": {
+				Type:         schema.TypeString,
+				Optional:     true,
+				Computed:     true,
+				Description:  "How the portal decides whether targets open in a new browser tab.",
+				ValidateFunc: validation.StringInSlice([]string{"DefaultOn", "DefaultOff", "ForcedOn", "ForcedOff"}, false),
+			},
 			"show_session_menu": {
 				Type:        schema.TypeBool,
 				Optional:    true,
@@ -125,6 +143,9 @@ func resourceParameters() *schema.Resource {
 				intAtLeastZero,
 			),
 			"record_scp": optionalComputedBoolParameter("Record SCP sessions."),
+			"record_desktop_keyboard_input": optionalComputedBoolParameter(
+				"Record keyboard input in RDP and VNC session recordings.",
+			),
 			"login_protection_enabled": optionalComputedBoolParameter(
 				"Enable login protection.",
 			),
@@ -177,15 +198,151 @@ func resourceParameters() *schema.Resource {
 			"lp_user_exempt_admins": optionalComputedBoolParameter(
 				"Exempt administrators from user login protection lockouts.",
 			),
-			"ssh_banner": {
+			"banner": {
 				Type:        schema.TypeString,
 				Optional:    true,
 				Computed:    true,
-				Description: "Banner shown to SSH clients before authentication.",
+				Description: "Banner shown to clients before authentication.",
 			},
-			"web_ssh_enabled": optionalComputedBoolParameter(
-				"Enable web-based SSH sessions.",
+			"web_clients_enabled": optionalComputedBoolParameter(
+				"Enable the web-based session clients.",
 			),
+			"ssh_host_key_verification": {
+				Type:         schema.TypeString,
+				Optional:     true,
+				Computed:     true,
+				Description:  "What to do when a target's SSH host key isn't in the known hosts list.",
+				ValidateFunc: validation.StringInSlice([]string{"Prompt", "AutoAccept", "AutoReject", "Ignore"}, false),
+			},
+			// 0 is rejected: the API distinguishes unset (reauthentication never
+			// required) from 0 (reauthentication required on every action), and
+			// the unset value reads back as 0, inviting the wrong meaning.
+			"web_auth_max_age_seconds": optionalIntParameter(
+				"How long a web login stays valid before reauthentication is required, in seconds. Unset means reauthentication is never required.",
+				validation.ToDiagFunc(validation.IntAtLeast(1)),
+			),
+			"web_approval_grace_period_seconds": optionalIntParameter(
+				"How long a remembered web approval stays valid, in seconds.",
+				intAtLeastZero,
+			),
+			// Same unset-vs-0 distinction as web_auth_max_age_seconds: the API
+			// rejects 0 and reads an unset value back as 0.
+			"admin_approval_timeout_seconds": optionalIntParameter(
+				"How long a session held for administrator approval waits before it is rejected, in seconds. Unset uses the login timeout.",
+				validation.ToDiagFunc(validation.IntAtLeast(1)),
+			),
+			"admin_approval_grace_period_seconds": optionalIntParameter(
+				"How long a remembered administrator approval stays valid, in seconds. Unset means approvals are not remembered.",
+				validation.ToDiagFunc(validation.IntAtLeast(1)),
+			),
+			"recordings_enable": optionalComputedBoolParameter("Record sessions."),
+			"recordings_storage": {
+				Type:        schema.TypeList,
+				Optional:    true,
+				Computed:    true,
+				MaxItems:    1,
+				Description: "Where session recordings are stored.",
+				Elem: &schema.Resource{
+					Schema: map[string]*schema.Schema{
+						"disk": {
+							Type:     schema.TypeList,
+							Optional: true,
+							MaxItems: 1,
+							ExactlyOneOf: []string{
+								"recordings_storage.0.disk",
+								"recordings_storage.0.s3",
+							},
+							Description: "Local filesystem storage",
+							Elem: &schema.Resource{
+								Schema: map[string]*schema.Schema{
+									"path": {
+										Type:        schema.TypeString,
+										Required:    true,
+										Description: "Directory recordings are written to",
+									},
+								},
+							},
+						},
+						"s3": {
+							Type:     schema.TypeList,
+							Optional: true,
+							MaxItems: 1,
+							ExactlyOneOf: []string{
+								"recordings_storage.0.disk",
+								"recordings_storage.0.s3",
+							},
+							Description: "S3 or S3-compatible object storage",
+							Elem: &schema.Resource{
+								Schema: map[string]*schema.Schema{
+									"bucket": {
+										Type:        schema.TypeString,
+										Required:    true,
+										Description: "Bucket name",
+									},
+									"region": {
+										Type:        schema.TypeString,
+										Required:    true,
+										Description: "Bucket region",
+									},
+									"endpoint": {
+										Type:        schema.TypeString,
+										Optional:    true,
+										Description: "Custom endpoint for S3-compatible services. Empty means AWS.",
+									},
+									"path_style": {
+										Type:        schema.TypeBool,
+										Optional:    true,
+										Description: "Path-style addressing, required by most S3-compatible services",
+									},
+									"prefix": {
+										Type:        schema.TypeString,
+										Optional:    true,
+										Description: "Key prefix prepended to every object path",
+									},
+									"auto_credentials": {
+										Type:     schema.TypeList,
+										Optional: true,
+										MaxItems: 1,
+										ExactlyOneOf: []string{
+											"recordings_storage.0.s3.0.auto_credentials",
+											"recordings_storage.0.s3.0.static_credentials",
+										},
+										Description: "Authenticate with the ambient AWS credential chain",
+										Elem: &schema.Resource{
+											Schema: map[string]*schema.Schema{},
+										},
+									},
+									"static_credentials": {
+										Type:     schema.TypeList,
+										Optional: true,
+										MaxItems: 1,
+										ExactlyOneOf: []string{
+											"recordings_storage.0.s3.0.auto_credentials",
+											"recordings_storage.0.s3.0.static_credentials",
+										},
+										Description: "Authenticate with an explicit key pair",
+										Elem: &schema.Resource{
+											Schema: map[string]*schema.Schema{
+												"access_key_id": {
+													Type:        schema.TypeString,
+													Required:    true,
+													Description: "Access key ID",
+												},
+												"secret_access_key": {
+													Type:        schema.TypeString,
+													Optional:    true,
+													Sensitive:   true,
+													Description: "Secret access key. The API never returns it, so it is carried over from configuration on read; omit to keep the secret already stored in Warpgate.",
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
 			"analytics_consent": {
 				Type:         schema.TypeString,
 				Optional:     true,
@@ -265,6 +422,9 @@ func resourceParametersRead(ctx context.Context, d *schema.ResourceData, meta an
 		{"ssh_client_auth_password", params.SSHClientAuthPassword},
 		{"ssh_client_auth_keyboard_interactive", params.SSHClientAuthKeyboardInteractive},
 		{"password_login_mode", params.PasswordLoginMode},
+		{"mfa_enforcement", params.MfaEnforcement},
+		{"mfa_policy_exempt_sso_users", params.MfaPolicyExemptSsoUsers},
+		{"default_credential_policy", flattenCredentialPolicy(&params.DefaultCredentialPolicy)},
 		{"ticket_self_service_enabled", params.TicketSelfServiceEnabled},
 		{"ticket_auto_approve_existing_access", params.TicketAutoApproveExistingAccess},
 		{"ticket_max_duration_seconds", int(params.TicketMaxDurationSeconds)},
@@ -272,10 +432,12 @@ func resourceParametersRead(ctx context.Context, d *schema.ResourceData, meta an
 		{"ticket_require_description", params.TicketRequireDescription},
 		{"ticket_request_show_all_targets", params.TicketRequestShowAllTargets},
 		{"target_click_action", params.TargetClickAction},
+		{"open_targets_in_new_tab", params.OpenTargetsInNewTab},
 		{"show_session_menu", params.ShowSessionMenu},
 		{"password_policy", flattenPasswordPolicy(params.PasswordPolicy)},
 		{"max_api_token_duration_seconds", int(params.MaxAPITokenDurationSeconds)},
 		{"record_scp", params.RecordSCP},
+		{"record_desktop_keyboard_input", params.RecordDesktopKeyboardInput},
 		{"login_protection_enabled", params.LoginProtectionEnabled},
 		{"login_protection_retention_seconds", params.LoginProtectionRetentionSeconds},
 		{"lp_ip_max_attempts", params.LPIPMaxAttempts},
@@ -289,10 +451,17 @@ func resourceParametersRead(ctx context.Context, d *schema.ResourceData, meta an
 		{"lp_user_auto_unlock", params.LPUserAutoUnlock},
 		{"lp_user_lockout_duration_seconds", params.LPUserLockoutDurationSeconds},
 		{"lp_user_exempt_admins", params.LPUserExemptAdmins},
-		{"ssh_banner", params.SSHBanner},
-		{"web_ssh_enabled", params.WebSSHEnabled},
+		{"banner", params.Banner},
+		{"web_clients_enabled", params.WebClientsEnabled},
 		{"analytics_consent", params.AnalyticsConsent},
 		{"analytics_normal", params.AnalyticsNormal},
+		{"ssh_host_key_verification", params.SSHHostKeyVerification},
+		{"web_auth_max_age_seconds", int(params.WebAuthMaxAgeSeconds)},
+		{"web_approval_grace_period_seconds", int(params.WebApprovalGracePeriodSeconds)},
+		{"admin_approval_timeout_seconds", int(params.AdminApprovalTimeoutSeconds)},
+		{"admin_approval_grace_period_seconds", int(params.AdminApprovalGracePeriodSeconds)},
+		{"recordings_enable", params.RecordingsEnable},
+		{"recordings_storage", flattenRecordingsStorage(d, params.RecordingsStorage)},
 	} {
 		if err := d.Set(field.name, field.value); err != nil {
 			return diag.FromErr(fmt.Errorf("failed to set %s: %w", field.name, err))
@@ -324,6 +493,9 @@ func expandParametersUpdateRequest(d *schema.ResourceData) *client.ParametersUpd
 		SSHClientAuthPublickey:           optionalBoolPointer(d, "ssh_client_auth_publickey"),
 		SSHClientAuthPassword:            optionalBoolPointer(d, "ssh_client_auth_password"),
 		SSHClientAuthKeyboardInteractive: optionalBoolPointer(d, "ssh_client_auth_keyboard_interactive"),
+		MfaEnforcement:                   optionalStringPointer(d, "mfa_enforcement"),
+		MfaPolicyExemptSsoUsers:          optionalBoolPointer(d, "mfa_policy_exempt_sso_users"),
+		DefaultCredentialPolicy:          expandDefaultCredentialPolicy(d),
 		TicketSelfServiceEnabled:         optionalBoolPointer(d, "ticket_self_service_enabled"),
 		TicketAutoApproveExistingAccess:  optionalBoolPointer(d, "ticket_auto_approve_existing_access"),
 		TicketMaxDurationSeconds:         optionalInt64Pointer(d, "ticket_max_duration_seconds"),
@@ -331,10 +503,12 @@ func expandParametersUpdateRequest(d *schema.ResourceData) *client.ParametersUpd
 		TicketRequireDescription:         optionalBoolPointer(d, "ticket_require_description"),
 		TicketRequestShowAllTargets:      optionalBoolPointer(d, "ticket_request_show_all_targets"),
 		TargetClickAction:                optionalStringPointer(d, "target_click_action"),
+		OpenTargetsInNewTab:              optionalStringPointer(d, "open_targets_in_new_tab"),
 		ShowSessionMenu:                  optionalBoolPointer(d, "show_session_menu"),
 		PasswordPolicy:                   expandPasswordPolicy(d),
 		MaxAPITokenDurationSeconds:       optionalInt64Pointer(d, "max_api_token_duration_seconds"),
 		RecordSCP:                        optionalBoolPointer(d, "record_scp"),
+		RecordDesktopKeyboardInput:       optionalBoolPointer(d, "record_desktop_keyboard_input"),
 		LoginProtectionEnabled:           optionalBoolPointer(d, "login_protection_enabled"),
 		LoginProtectionRetentionSeconds:  optionalIntPointer(d, "login_protection_retention_seconds"),
 		LPIPMaxAttempts:                  optionalIntPointer(d, "lp_ip_max_attempts"),
@@ -348,10 +522,17 @@ func expandParametersUpdateRequest(d *schema.ResourceData) *client.ParametersUpd
 		LPUserAutoUnlock:                 optionalBoolPointer(d, "lp_user_auto_unlock"),
 		LPUserLockoutDurationSeconds:     optionalIntPointer(d, "lp_user_lockout_duration_seconds"),
 		LPUserExemptAdmins:               optionalBoolPointer(d, "lp_user_exempt_admins"),
-		SSHBanner:                        optionalStringPointer(d, "ssh_banner"),
-		WebSSHEnabled:                    optionalBoolPointer(d, "web_ssh_enabled"),
+		Banner:                           optionalStringPointer(d, "banner"),
+		WebClientsEnabled:                optionalBoolPointer(d, "web_clients_enabled"),
 		AnalyticsConsent:                 optionalStringPointer(d, "analytics_consent"),
 		AnalyticsNormal:                  optionalBoolPointer(d, "analytics_normal"),
+		SSHHostKeyVerification:           optionalStringPointer(d, "ssh_host_key_verification"),
+		WebAuthMaxAgeSeconds:             optionalInt64Pointer(d, "web_auth_max_age_seconds"),
+		WebApprovalGracePeriodSeconds:    optionalInt64Pointer(d, "web_approval_grace_period_seconds"),
+		AdminApprovalTimeoutSeconds:      optionalInt64Pointer(d, "admin_approval_timeout_seconds"),
+		AdminApprovalGracePeriodSeconds:  optionalInt64Pointer(d, "admin_approval_grace_period_seconds"),
+		RecordingsEnable:                 optionalBoolPointer(d, "recordings_enable"),
+		RecordingsStorage:                expandRecordingsStorage(d),
 	}
 
 	if passwordLoginMode := optionalStringPointer(d, "password_login_mode"); passwordLoginMode != nil {
@@ -359,6 +540,150 @@ func expandParametersUpdateRequest(d *schema.ResourceData) *client.ParametersUpd
 	}
 
 	return req
+}
+
+// expandDefaultCredentialPolicy sends the policy only when it is configured:
+// the update is partial, and an unconfigured block must not wipe the stored one.
+func expandDefaultCredentialPolicy(d *schema.ResourceData) *client.UserRequireCredentialsPolicy {
+	if !configuredValueExists(d, "default_credential_policy") {
+		return nil
+	}
+
+	return expandCredentialPolicy(d.Get("default_credential_policy").([]any))
+}
+
+func flattenRecordingsStorage(d *schema.ResourceData, cfg client.RecordingsStorageConfig) []any {
+	switch cfg.Kind {
+	case "Disk":
+		return []any{
+			map[string]any{
+				"disk": []any{
+					map[string]any{"path": stringValue(cfg.Path)},
+				},
+			},
+		}
+	case "S3":
+		s3 := map[string]any{
+			"bucket":     stringValue(cfg.Bucket),
+			"region":     stringValue(cfg.Region),
+			"endpoint":   stringValue(cfg.Endpoint),
+			"path_style": boolValue(cfg.PathStyle),
+			"prefix":     stringValue(cfg.Prefix),
+		}
+
+		if cfg.Credentials != nil {
+			switch cfg.Credentials.Mode {
+			case "Static":
+				s3["static_credentials"] = []any{
+					map[string]any{
+						"access_key_id": stringValue(cfg.Credentials.AccessKeyID),
+						// The API redacts the secret, so echoing the response
+						// would wipe it from state on every read.
+						"secret_access_key": d.Get("recordings_storage.0.s3.0.static_credentials.0.secret_access_key"),
+					},
+				}
+			case "Auto":
+				s3["auto_credentials"] = []any{map[string]any{}}
+			}
+		}
+
+		return []any{map[string]any{"s3": []any{s3}}}
+	default:
+		return nil
+	}
+}
+
+func expandRecordingsStorage(d *schema.ResourceData) *client.RecordingsStorageConfig {
+	if !configuredValueExists(d, "recordings_storage") {
+		return nil
+	}
+
+	raw := d.Get("recordings_storage").([]any)
+	if len(raw) == 0 || raw[0] == nil {
+		return nil
+	}
+
+	return buildRecordingsStorage(raw[0].(map[string]any))
+}
+
+func buildRecordingsStorage(storage map[string]any) *client.RecordingsStorageConfig {
+	if disk, ok := firstBlock(storage, "disk"); ok {
+		path := blockString(disk, "path")
+
+		return &client.RecordingsStorageConfig{Kind: "Disk", Path: &path}
+	}
+
+	s3, ok := firstBlock(storage, "s3")
+	if !ok {
+		return nil
+	}
+
+	bucket := blockString(s3, "bucket")
+	region := blockString(s3, "region")
+	pathStyle := blockBool(s3, "path_style")
+	prefix := blockString(s3, "prefix")
+
+	cfg := &client.RecordingsStorageConfig{
+		Kind:      "S3",
+		Bucket:    &bucket,
+		Region:    &region,
+		PathStyle: &pathStyle,
+		Prefix:    &prefix,
+	}
+
+	if endpoint := blockString(s3, "endpoint"); endpoint != "" {
+		cfg.Endpoint = &endpoint
+	}
+
+	if static, ok := firstBlock(s3, "static_credentials"); ok {
+		accessKeyID := blockString(static, "access_key_id")
+
+		cfg.Credentials = &client.S3Credentials{Mode: "Static", AccessKeyID: &accessKeyID}
+		// Omitting the secret tells Warpgate to keep the one it already has.
+		if secret := blockString(static, "secret_access_key"); secret != "" {
+			cfg.Credentials.SecretAccessKey = &secret
+		}
+	} else if autos, ok := s3["auto_credentials"].([]any); ok && len(autos) > 0 {
+		cfg.Credentials = &client.S3Credentials{Mode: "Auto"}
+	}
+
+	return cfg
+}
+
+// firstBlock returns the single element of a MaxItems:1 nested block.
+func firstBlock(m map[string]any, key string) (map[string]any, bool) {
+	items, ok := m[key].([]any)
+	if !ok || len(items) == 0 || items[0] == nil {
+		return nil, false
+	}
+
+	block, ok := items[0].(map[string]any)
+
+	return block, ok
+}
+
+func blockString(m map[string]any, key string) string {
+	v, _ := m[key].(string)
+
+	return v
+}
+
+func blockBool(m map[string]any, key string) bool {
+	v, _ := m[key].(bool)
+
+	return v
+}
+
+func stringValue(v *string) string {
+	if v == nil {
+		return ""
+	}
+
+	return *v
+}
+
+func boolValue(v *bool) bool {
+	return v != nil && *v
 }
 
 func flattenPasswordPolicy(policy client.PasswordPolicy) []any {

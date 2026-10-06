@@ -45,6 +45,31 @@ func dataSourceTarget() *schema.Resource {
 				Computed:    true,
 				Description: "Bandwidth limit in bytes per second",
 			},
+			"ticket_max_duration_seconds": {
+				Type:        schema.TypeInt,
+				Computed:    true,
+				Description: "Maximum ticket duration in seconds for this target",
+			},
+			"ticket_requests_disabled": {
+				Type:        schema.TypeBool,
+				Computed:    true,
+				Description: "Whether ticket requests are disabled for this target",
+			},
+			"ticket_require_approval": {
+				Type:        schema.TypeBool,
+				Computed:    true,
+				Description: "Whether ticket requests require manual approval",
+			},
+			"require_approval": {
+				Type:        schema.TypeBool,
+				Computed:    true,
+				Description: "Whether new sessions are held until an administrator approves them",
+			},
+			"ticket_max_uses": {
+				Type:        schema.TypeInt,
+				Computed:    true,
+				Description: "Maximum number of uses allowed per ticket",
+			},
 			"allow_roles": {
 				Type:        schema.TypeList,
 				Computed:    true,
@@ -80,6 +105,11 @@ func dataSourceTarget() *schema.Resource {
 							Computed:    true,
 							Description: "Allow insecure SSH algorithms",
 						},
+						"jump_host": {
+							Type:        schema.TypeString,
+							Computed:    true,
+							Description: "ID of another target to use as an SSH jump host",
+						},
 						"password_auth": {
 							Type:        schema.TypeList,
 							Computed:    true,
@@ -99,6 +129,20 @@ func dataSourceTarget() *schema.Resource {
 							Type:        schema.TypeList,
 							Computed:    true,
 							Description: "Public key authentication for SSH",
+							Elem: &schema.Resource{
+								Schema: map[string]*schema.Schema{
+									"key_id": {
+										Type:        schema.TypeString,
+										Computed:    true,
+										Description: "Specific stored client key ID to authenticate with",
+									},
+								},
+							},
+						},
+						"iam_role_auth": {
+							Type:        schema.TypeList,
+							Computed:    true,
+							Description: "IAM Role authentication for SSH",
 							Elem: &schema.Resource{
 								Schema: map[string]*schema.Schema{},
 							},
@@ -181,6 +225,14 @@ func dataSourceTarget() *schema.Resource {
 							Sensitive:   true,
 							Description: "The MySQL password",
 						},
+						"iam_role_auth": {
+							Type:        schema.TypeList,
+							Computed:    true,
+							Description: "AWS IAM authentication instead of a password",
+							Elem: &schema.Resource{
+								Schema: map[string]*schema.Schema{},
+							},
+						},
 						"tls": {
 							Type:        schema.TypeList,
 							Computed:    true,
@@ -235,11 +287,24 @@ func dataSourceTarget() *schema.Resource {
 							Computed:    true,
 							Description: "The PostgreSQL protocol version requested by the target",
 						},
+						"idle_timeout": {
+							Type:        schema.TypeString,
+							Computed:    true,
+							Description: "Idle connection timeout as a duration string",
+						},
 						"password": {
 							Type:        schema.TypeString,
 							Computed:    true,
 							Sensitive:   true,
 							Description: "The PostgreSQL password",
+						},
+						"iam_role_auth": {
+							Type:        schema.TypeList,
+							Computed:    true,
+							Description: "AWS IAM authentication instead of a password",
+							Elem: &schema.Resource{
+								Schema: map[string]*schema.Schema{},
+							},
 						},
 						"tls": {
 							Type:        schema.TypeList,
@@ -329,6 +394,96 @@ func dataSourceTarget() *schema.Resource {
 								},
 							},
 						},
+						"iam_role_auth": {
+							Type:        schema.TypeList,
+							Computed:    true,
+							Description: "AWS IAM authentication (EKS) instead of a token or certificate",
+							Elem: &schema.Resource{
+								Schema: map[string]*schema.Schema{},
+							},
+						},
+					},
+				},
+			},
+			// RDP Target Configuration
+			"rdp_options": {
+				Type:        schema.TypeList,
+				Computed:    true,
+				Description: "RDP target options",
+				Elem: &schema.Resource{
+					Schema: map[string]*schema.Schema{
+						"host": {
+							Type:        schema.TypeString,
+							Computed:    true,
+							Description: "The RDP server hostname or IP address",
+						},
+						"port": {
+							Type:        schema.TypeInt,
+							Computed:    true,
+							Description: "The RDP server port",
+						},
+						"username": {
+							Type:        schema.TypeString,
+							Computed:    true,
+							Description: "The RDP username",
+						},
+						"domain": {
+							Type:        schema.TypeString,
+							Computed:    true,
+							Description: "The RDP authentication domain",
+						},
+						"password": {
+							Type:        schema.TypeString,
+							Computed:    true,
+							Sensitive:   true,
+							Description: "The password for RDP authentication",
+						},
+						"verify_tls": {
+							Type:        schema.TypeBool,
+							Computed:    true,
+							Description: "Verify the RDP server's TLS certificate",
+						},
+						"tls_security": {
+							Type:        schema.TypeString,
+							Computed:    true,
+							Description: "TLS security profile for the RDP connection",
+						},
+						"compression": {
+							Type:        schema.TypeString,
+							Computed:    true,
+							Description: "Codec advertised to the RDP server",
+						},
+						"interactive_logon": {
+							Type:        schema.TypeBool,
+							Computed:    true,
+							Description: "Whether the target's own sign-in screen is shown",
+						},
+					},
+				},
+			},
+			// VNC Target Configuration
+			"vnc_options": {
+				Type:        schema.TypeList,
+				Computed:    true,
+				Description: "VNC target options",
+				Elem: &schema.Resource{
+					Schema: map[string]*schema.Schema{
+						"host": {
+							Type:        schema.TypeString,
+							Computed:    true,
+							Description: "The VNC server hostname or IP address",
+						},
+						"port": {
+							Type:        schema.TypeInt,
+							Computed:    true,
+							Description: "The VNC server port",
+						},
+						"password": {
+							Type:        schema.TypeString,
+							Computed:    true,
+							Sensitive:   true,
+							Description: "The VNC password, empty for a server without authentication",
+						},
 					},
 				},
 			},
@@ -370,7 +525,8 @@ func dataSourceTargetRead(ctx context.Context, d *schema.ResourceData, meta any)
 		}
 	} else {
 		idStr := id.(string)
-		target, err := c.GetTarget(ctx, idStr)
+		var err error
+		target, err = c.GetTarget(ctx, idStr)
 		if err != nil {
 			return diag.FromErr(fmt.Errorf("failed to read target: %w", err))
 		}
@@ -399,6 +555,26 @@ func dataSourceTargetRead(ctx context.Context, d *schema.ResourceData, meta any)
 
 	if err := d.Set("allow_roles", target.AllowRoles); err != nil {
 		return diag.FromErr(fmt.Errorf("failed to set allow_roles: %w", err))
+	}
+
+	if err := setOptionalInt64(d, "ticket_max_duration_seconds", target.TicketMaxDurationSeconds); err != nil {
+		return diag.FromErr(fmt.Errorf("failed to set ticket_max_duration_seconds: %w", err))
+	}
+
+	if err := d.Set("ticket_requests_disabled", target.TicketRequestsDisabled); err != nil {
+		return diag.FromErr(fmt.Errorf("failed to set ticket_requests_disabled: %w", err))
+	}
+
+	if err := d.Set("ticket_require_approval", target.TicketRequireApproval); err != nil {
+		return diag.FromErr(fmt.Errorf("failed to set ticket_require_approval: %w", err))
+	}
+
+	if err := d.Set("require_approval", target.RequireApproval); err != nil {
+		return diag.FromErr(fmt.Errorf("failed to set require_approval: %w", err))
+	}
+
+	if err := setOptionalInt(d, "ticket_max_uses", target.TicketMaxUses); err != nil {
+		return diag.FromErr(fmt.Errorf("failed to set ticket_max_uses: %w", err))
 	}
 
 	// Set the appropriate options block based on target type
